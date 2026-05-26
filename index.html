@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Libas Lounge</title>
+
+<style>
+body{
+margin:0;
+font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+background:#f5f5f7;
+color:#1d1d1f;
+}
+
+.header{
+display:flex;
+justify-content:space-between;
+padding:16px;
+background:rgba(255,255,255,0.8);
+backdrop-filter:blur(10px);
+position:sticky;
+top:0;
+}
+
+.nav button{
+background:none;
+border:none;
+color:#0071e3;
+margin-left:6px;
+font-size:14px;
+}
+
+.hero{
+height:45vh;
+display:flex;
+flex-direction:column;
+justify-content:center;
+align-items:center;
+text-align:center;
+}
+
+.grid{
+display:grid;
+grid-template-columns:repeat(2,1fr);
+gap:12px;
+padding:12px;
+}
+
+.card{
+background:#fff;
+border-radius:20px;
+padding:10px;
+box-shadow:0 4px 20px rgba(0,0,0,0.05);
+}
+
+.card img{
+width:100%;
+border-radius:12px;
+}
+
+button{
+border:none;
+border-radius:25px;
+padding:10px;
+background:#0071e3;
+color:#fff;
+margin-top:6px;
+}
+
+.cartBox,.checkout,.admin,.ordersPanel,.track,.successBox{
+position:fixed;
+top:0;left:0;width:100%;height:100%;
+background:#fff;
+padding:20px;
+display:none;
+overflow:auto;
+}
+
+input{
+width:100%;
+padding:12px;
+border-radius:12px;
+border:1px solid #ddd;
+margin:8px 0;
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">
+<b>Libas Lounge</b>
+<div class="nav">
+<button onclick="openCart()">Cart</button>
+<button onclick="openTrack()">Track</button>
+<button onclick="openAdmin()">Admin</button>
+<button onclick="openOrders()">Orders</button>
+</div>
+</div>
+
+<div class="hero">
+<h1>Minimal. Elegant. Timeless.</h1>
+</div>
+
+<div class="grid" id="products"></div>
+
+<!-- CART -->
+<div class="cartBox" id="cartBox">
+<h3>Your Bag</h3>
+<div id="cartItems"></div>
+<h4 id="totalBox"></h4>
+<button onclick="openCheckout()">Checkout</button>
+<button onclick="closeAll()">Close</button>
+</div>
+
+<!-- CHECKOUT -->
+<div class="checkout" id="checkout">
+<h3>Checkout</h3>
+
+<input id="phone" placeholder="Phone Number">
+
+<p><b>Payment Method:</b> Cash on Delivery</p>
+
+<button onclick="placeOrder()">Place Order</button>
+<button onclick="closeAll()">Close</button>
+</div>
+
+<!-- SUCCESS -->
+<div class="successBox" id="successBox">
+<h2>🎉 Order Placed!</h2>
+<p>We will contact you soon.</p>
+<button onclick="closeAll()">Continue</button>
+</div>
+
+<!-- ADMIN -->
+<div class="admin" id="admin">
+<h3>Admin Panel</h3>
+<input id="pname" placeholder="Product Name">
+<input id="pprice" placeholder="Price">
+<input id="pimg" placeholder="Image URL">
+<button onclick="addProduct()">Add Product</button>
+</div>
+
+<!-- ORDERS -->
+<div class="ordersPanel" id="ordersPanel">
+<h3>Orders</h3>
+<button onclick="loadOrders()">Load Orders</button>
+<div id="ordersList"></div>
+
+<input id="updateID" placeholder="Order ID">
+<select id="statusUpdate">
+<option>Pending</option>
+<option>Confirmed</option>
+<option>Shipped</option>
+<option>Out for Delivery</option>
+<option>Delivered</option>
+</select>
+<button onclick="updateStatus()">Update Status</button>
+</div>
+
+<!-- TRACK -->
+<div class="track" id="track">
+<h3>Track Order</h3>
+<input id="trackPhone" placeholder="Enter Phone">
+<button onclick="trackOrder()">Track</button>
+<div id="result"></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+
+<script>
+const firebaseConfig={
+apiKey:"XXXX",
+projectId:"XXXX"
+};
+firebase.initializeApp(firebaseConfig);
+const db=firebase.firestore();
+
+// CART
+let cart=[];
+
+function addToCart(name,price){
+let f=cart.find(i=>i.name===name);
+if(f){f.qty++}else{cart.push({name,price,qty:1})}
+alert("Added to bag");
+}
+
+function openCart(){
+let html="",total=0;
+cart.forEach((i,index)=>{
+total+=i.price*i.qty;
+html+=`<p>${i.name} x${i.qty}
+<button onclick="changeQty(${index},1)">+</button>
+<button onclick="changeQty(${index},-1)">-</button>
+<button onclick="removeItem(${index})">X</button>
+</p>`;
+});
+cartItems.innerHTML=html;
+totalBox.innerHTML="Total Rs "+total;
+cartBox.style.display="block";
+}
+
+function changeQty(i,c){
+cart[i].qty+=c;
+if(cart[i].qty<=0)cart.splice(i,1);
+openCart();
+}
+
+function removeItem(i){
+cart.splice(i,1);
+openCart();
+}
+
+// PRODUCTS
+db.collection("products").onSnapshot(s=>{
+let html="";
+s.forEach(doc=>{
+let p=doc.data();
+html+=`
+<div class="card">
+<img src="${p.img}">
+<h4>${p.name}</h4>
+<p>Rs ${p.price}</p>
+<button onclick="addToCart('${p.name}',${p.price})">Add to Bag</button>
+</div>`;
+});
+products.innerHTML=html;
+});
+
+// ADMIN
+function addProduct(){
+db.collection("products").add({
+name:pname.value,
+price:pprice.value,
+img:pimg.value
+});
+}
+
+// ORDER ID
+function getNextOrderID(cb){
+db.collection("orders").get().then(s=>{
+cb("LL-"+(s.size+1));
+});
+}
+
+// ORDER
+function placeOrder(){
+
+getNextOrderID(function(orderID){
+
+let items="",total=0;
+
+cart.forEach(i=>{
+items+=`${i.name} x${i.qty}, `;
+total+=i.price*i.qty;
+});
+
+// DELIVERY
+let delivery = total>=3000 ? 0 : 200;
+let finalTotal = total + delivery;
+
+db.collection("orders").add({
+orderID,
+items,
+total:finalTotal,
+phone:phone.value,
+payment:"COD",
+status:"Pending"
+});
+
+// WHATSAPP
+let msg=`Order ID: ${orderID}
+Items: ${items}
+Total: Rs ${finalTotal}
+Payment: COD`;
+
+window.open("https://wa.me/923002292923?text="+encodeURIComponent(msg));
+
+cart=[];
+checkout.style.display="none";
+successBox.style.display="block";
+
+});
+
+}
+
+// TRACK
+function openTrack(){track.style.display="block";}
+function trackOrder(){
+db.collection("orders").where("phone","==",trackPhone.value).get().then(s=>{
+let html="";
+s.forEach(d=>{
+let o=d.data();
+html+=`<p>${o.orderID} - ${o.status}</p>`;
+});
+result.innerHTML=html||"No order";
+});
+}
+
+// ORDERS
+function openOrders(){ordersPanel.style.display="block";}
+function loadOrders(){
+db.collection("orders").get().then(s=>{
+let html="";
+s.forEach(d=>{
+let o=d.data();
+html+=`<p>${o.orderID} - ${o.status} - ${o.phone}</p>`;
+});
+ordersList.innerHTML=html;
+});
+}
+
+function updateStatus(){
+db.collection("orders").get().then(s=>{
+s.forEach(d=>{
+if(d.data().orderID===updateID.value){
+db.collection("orders").doc(d.id).update({
+status:statusUpdate.value
+});
+}
+});
+});
+}
+
+// ADMIN LOGIN
+function openAdmin(){
+if(prompt("Password")=="1234"){
+admin.style.display="block";
+}
+}
+
+// CLOSE
+function closeAll(){
+cartBox.style.display="none";
+checkout.style.display="none";
+admin.style.display="none";
+ordersPanel.style.display="none";
+track.style.display="none";
+successBox.style.display="none";
+}
+</script>
+
+</body>
+</html>
